@@ -143,9 +143,39 @@ export function Performance() {
   return <><PageHeader title="Performance" description="Understand your progress across test attempts."/><div className="stats-grid"><Stat icon={Trophy} label="Tests completed" value={rows.length}/><Stat icon={Target} label="Best score" value={rows.length ? Math.max(...rows.map(r=>Number(r.percentage||0)))+"%" : "—"}/><Stat icon={ChartNoAxesCombined} label="Latest score" value={rows.length ? rows[rows.length-1].percentage+"%" : "—"}/></div><div className="panel"><h3>Attempt history</h3>{rows.length ? <div className="data-card-list">{rows.map(r=><div className="data-row" key={r.id}><div className="row-main"><b>{new Date(r.created_at).toLocaleDateString()}</b><small>{r.correct_count} correct / {r.wrong_count} wrong / {r.unattempted_count} unattempted</small></div><b>{r.percentage}%</b></div>)}</div> : <EmptyState title="Your progress will appear here"/>}</div></>;
 }
 
+
 export function Announcements() {
-  const { rows, loading } = useRows("announcements", [["is_published","eq",true]]);
-  return <><PageHeader title="Announcements" description="Important updates and notices."/>{loading ? <div className="loading-line">Loading announcements...</div> : rows.length ? <div className="data-card-list">{rows.map(n=><article className="announcement-card" key={n.id}><div className="notice-dot"/><div><h3>{n.title}</h3><p>{n.body}</p><small>{new Date(n.created_at).toLocaleDateString()}</small></div></article>) : <EmptyState title="No announcements yet"/>}</>;
+  const { rows, loading } = useRows("announcements", [["is_published", "eq", true]]);
+
+  return (
+    <>
+      <PageHeader
+        title="Announcements"
+        description="Important updates and notices."
+      />
+
+      {loading ? (
+        <div className="loading-line">Loading announcements...</div>
+      ) : rows.length > 0 ? (
+        <div className="data-card-list">
+          {rows.map((n) => (
+            <article className="announcement-card" key={n.id}>
+              <div className="notice-dot" />
+              <div>
+                <h3>{n.title}</h3>
+                <p>{n.body}</p>
+                <small>
+                  {new Date(n.created_at).toLocaleDateString()}
+                </small>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No announcements yet" />
+      )}
+    </>
+  );
 }
 
 export function Profile() {
