@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../components/AuthProvider";
 import PageHeader from "../components/PageHeader";
-import { ArrowUpRight, BookOpen, ClipboardList, Trophy, Users, FileText, Bell, Target, Clock3, CheckCircle2, Search, Plus, RefreshCw } from "lucide-react";
+import { ArrowUpRight, BookOpen, ClipboardList, Trophy, Users, FileText, Bell, Target, Clock3, CheckCircle2, Search, Plus, RefreshCw, Pencil, Trash2, X, Save } from "lucide-react";
 
 const categories = ["RRB NTPC", "Group D", "ALP", "Technician", "JE", "RPF Constable", "RPF SI"];
 
@@ -143,39 +143,9 @@ export function Performance() {
   return <><PageHeader title="Performance" description="Understand your progress across test attempts."/><div className="stats-grid"><Stat icon={Trophy} label="Tests completed" value={rows.length}/><Stat icon={Target} label="Best score" value={rows.length ? Math.max(...rows.map(r=>Number(r.percentage||0)))+"%" : "—"}/><Stat icon={ChartNoAxesCombined} label="Latest score" value={rows.length ? rows[rows.length-1].percentage+"%" : "—"}/></div><div className="panel"><h3>Attempt history</h3>{rows.length ? <div className="data-card-list">{rows.map(r=><div className="data-row" key={r.id}><div className="row-main"><b>{new Date(r.created_at).toLocaleDateString()}</b><small>{r.correct_count} correct / {r.wrong_count} wrong / {r.unattempted_count} unattempted</small></div><b>{r.percentage}%</b></div>)}</div> : <EmptyState title="Your progress will appear here"/>}</div></>;
 }
 
-
 export function Announcements() {
-  const { rows, loading } = useRows("announcements", [["is_published", "eq", true]]);
-
-  return (
-    <>
-      <PageHeader
-        title="Announcements"
-        description="Important updates and notices."
-      />
-
-      {loading ? (
-        <div className="loading-line">Loading announcements...</div>
-      ) : rows.length > 0 ? (
-        <div className="data-card-list">
-          {rows.map((n) => (
-            <article className="announcement-card" key={n.id}>
-              <div className="notice-dot" />
-              <div>
-                <h3>{n.title}</h3>
-                <p>{n.body}</p>
-                <small>
-                  {new Date(n.created_at).toLocaleDateString()}
-                </small>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <EmptyState title="No announcements yet" />
-      )}
-    </>
-  );
+  const { rows, loading } = useRows("announcements", [["is_published","eq",true]]);
+  return <><PageHeader title="Announcements" description="Important updates and notices."/>{loading ? <div className="loading-line">Loading announcements...</div> : rows.length ? <div className="data-card-list">{rows.map(n=><article className="announcement-card" key={n.id}><div className="notice-dot"/><div><h3>{n.title}</h3><p>{n.body}</p><small>{new Date(n.created_at).toLocaleDateString()}</small></div></article>) : <EmptyState title="No announcements yet"/>}</>;
 }
 
 export function Profile() {
@@ -201,6 +171,77 @@ export function Account() {
   async function reset(){const email=window.prompt("Enter your account email address");if(!email)return;const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+"/reset-password"});setMessage(error?.message||"Password reset instructions have been sent if the account exists.");}
   async function deletion(){const reason=window.prompt("Optional: tell us why you want to delete your account");if(reason===null)return;const {data:{user}}=await supabase.auth.getUser();const {error}=await supabase.from("account_deletion_requests").insert({user_id:user.id,reason});setMessage(error?.message||"Your account deletion request has been submitted for review.");}
   return <><PageHeader title="Account settings" description="Manage your account security and access."/><div className="panel settings-list"><div><div><b>Password reset</b><p>Receive a secure password reset link by email.</p></div><button className="btn btn-outline" onClick={reset}>Send reset link</button></div><div><div><b>Account deletion request</b><p>Submit a request to have your account reviewed for deletion.</p></div><button className="btn btn-outline danger-outline" onClick={deletion}>Request deletion</button></div>{message&&<div className="inline-message">{message}</div>}</div></>;
+}
+
+
+export function AdminCategories() {
+  const { rows, loading, error, reload } = useRows("categories");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  function resetForm() { setName(""); setDescription(""); setEditingId(null); setMessage(""); }
+
+  async function saveCategory(e) {
+    e.preventDefault();
+    if (!supabase) return;
+    setSaving(true); setMessage("");
+    const wasEditing = Boolean(editingId);
+    const payload = { name: name.trim(), description: description.trim() || null };
+    const result = editingId
+      ? await supabase.from("categories").update(payload).eq("id", editingId)
+      : await supabase.from("categories").insert(payload);
+    setSaving(false);
+    if (result.error) { setMessage(result.error.message); return; }
+    resetForm();
+    setMessage(wasEditing ? "Category updated successfully." : "Category added successfully.");
+    await reload();
+  }
+
+  function startEdit(category) {
+    setEditingId(category.id); setName(category.name || "");
+    setDescription(category.description || ""); setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function toggleActive(category) {
+    const { error } = await supabase.from("categories").update({ is_active: !category.is_active }).eq("id", category.id);
+    if (error) setMessage(error.message); else { setMessage(`Category ${category.is_active ? "hidden" : "published"} successfully.`); await reload(); }
+  }
+
+  async function deleteCategory(category) {
+    if (!window.confirm(`Delete ${category.name}? This cannot be undone.`)) return;
+    const { error } = await supabase.from("categories").delete().eq("id", category.id);
+    if (error) setMessage(error.message); else { setMessage("Category deleted successfully."); await reload(); }
+  }
+
+  return <>
+    <PageHeader eyebrow="ADMIN WORKSPACE" title="Category management" description="Add and manage railway examination categories."/>
+    <form className="panel profile-form" onSubmit={saveCategory} style={{maxWidth:"none", marginBottom:18}}>
+      <h3 style={{margin:0}}>{editingId ? "Edit category" : "Add new category"}</h3>
+      <label>Category name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. RRB NTPC" required maxLength={80}/></label>
+      <label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Short description of this examination" rows={3}/></label>
+      {message && <div className="inline-message">{message}</div>}
+      {error && <div className="inline-message">{error}</div>}
+      <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+        <button className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : <><Save size={15}/> {editingId ? "Update category" : "Add category"}</>}</button>
+        {editingId && <button type="button" className="btn btn-outline" onClick={resetForm}><X size={15}/> Cancel edit</button>}
+      </div>
+    </form>
+    <div className="toolbar"><div className="muted">{rows.length} categories</div><button className="btn btn-outline" onClick={reload}><RefreshCw size={15}/> Refresh</button></div>
+    {loading ? <div className="loading-line">Loading categories...</div> : rows.length ? <div className="data-card-list">
+      {rows.map(category => <div className="data-row" key={category.id}>
+        <div className="row-icon"><BookOpen/></div>
+        <div className="row-main"><b>{category.name}</b><small>{category.description || "No description added"}</small></div>
+        <span className={`pill ${category.is_active ? "pill-green" : "pill-gray"}`}>{category.is_active ? "Active" : "Hidden"}</span>
+        <button className="btn btn-outline btn-small" onClick={()=>startEdit(category)} title="Edit category"><Pencil size={14}/> Edit</button>
+        <button className="btn btn-outline btn-small" onClick={()=>toggleActive(category)}>{category.is_active ? "Hide" : "Publish"}</button>
+        <button className="btn btn-outline btn-small danger-outline" onClick={()=>deleteCategory(category)} title="Delete category"><Trash2 size={14}/></button>
+      </div>)}
+    </div> : <EmptyState title="No categories found" text="Add your first railway exam category using the form above."/>}
+  </>;
 }
 
 export function AdminDashboard() {
