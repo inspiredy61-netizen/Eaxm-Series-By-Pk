@@ -5,7 +5,7 @@ import ConfigNotice from "./components/ConfigNotice";
 import Auth from "./pages/Auth";
 import TestManagement from "./pages/TestManagement";
 import QuestionManagement from "./pages/QuestionManagement";
-import { StudentDashboard, Categories, TestList, TakeTest, Results, Performance, Announcements, Profile, Support, Account, AdminDashboard, AdminGeneric, AdminCategories, ForgotPassword } from "./pages/Pages";
+import { StudentDashboard, Categories, TestList, TakeTest, Results, ResultDetail, Performance, Announcements, Profile, Support, Account, AdminDashboard, AdminGeneric, AdminCategories, ForgotPassword } from "./pages/Pages";
 
 function StudentLayout(){return <Layout/>}
 function AdminLayout(){return <Layout admin/>}
@@ -26,6 +26,7 @@ export default function App() {
           <Route path="test/:id" element={<TakeTest/>}/>
           <Route path="pyq" element={<TestList pyq/>}/>
           <Route path="results" element={<Results/>}/>
+          <Route path="result/:id" element={<ResultDetail/>}/>
           <Route path="performance" element={<Performance/>}/>
           <Route path="announcements" element={<Announcements/>}/>
           <Route path="profile" element={<Profile/>}/>
