@@ -183,10 +183,36 @@ export function Performance() {
 }
 
 export function Announcements() {
-  const { rows, loading } = useRows("announcements", [["is_published","eq",true]]);
-  return <><PageHeader title="Announcements" description="Important updates and notices."/>{loading ? <div className="loading-line">Loading announcements...</div> : rows.length ? <div className="data-card-list">{rows.map(n=><article className="announcement-card" key={n.id}><div className="notice-dot"/><div><h3>{n.title}</h3><p>{n.body}</p><small>{new Date(n.created_at).toLocaleDateString()}</small></div></article>) : <EmptyState title="No announcements yet"/>}</>;
-}
+  const { rows, loading } = useRows("announcements", [["is_published", "eq", true]]);
 
+  return (
+    <>
+      <PageHeader
+        title="Announcements"
+        description="Important updates and notices."
+      />
+
+      {loading ? (
+        <div className="loading-line">Loading announcements...</div>
+      ) : rows.length ? (
+        <div className="data-card-list">
+          {rows.map((n) => (
+            <article className="announcement-card" key={n.id}>
+              <div className="notice-dot" />
+              <div>
+                <h3>{n.title}</h3>
+                <p>{n.body}</p>
+                <small>{new Date(n.created_at).toLocaleDateString()}</small>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No announcements yet" />
+      )}
+    </>
+  );
+}
 export function Profile() {
   const { user, profile, refreshProfile } = useAuth();
   const [name,setName] = useState(profile?.full_name || "");
