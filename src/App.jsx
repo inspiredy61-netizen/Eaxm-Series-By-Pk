@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ConfigNotice from "./components/ConfigNotice";
 import Auth from "./pages/Auth";
+import TestManagement from "./pages/TestManagement";
 import { StudentDashboard, Categories, TestList, TakeTest, Results, Performance, Announcements, Profile, Support, Account, AdminDashboard, AdminGeneric, AdminCategories, ForgotPassword } from "./pages/Pages";
 
 function StudentLayout(){return <Layout/>}
@@ -36,7 +37,7 @@ export default function App() {
           <Route index element={<AdminDashboard/>}/>
           <Route path="students" element={<AdminGeneric title="Student management" table="profiles" columns={["email","role","created_at"]}/>}/>
           <Route path="categories" element={<AdminCategories/>}/>
-          <Route path="tests" element={<TestList admin/>}/>
+          <Route path="tests" element={<TestManagement/>}/>
           <Route path="questions" element={<AdminGeneric title="Question management" table="questions" columns={["test_id","position","question_text"]}/>}/>
           <Route path="pyq" element={<TestList pyq admin/>}/>
           <Route path="results" element={<AdminGeneric title="Student results" table="results" columns={["student_id","test_id","score","percentage","created_at"]}/>}/>
