@@ -5,7 +5,6 @@ import { useAuth } from "../components/AuthProvider";
 import PageHeader from "../components/PageHeader";
 import { ArrowUpRight, BookOpen, ClipboardList, Trophy, Users, FileText, Bell, Target, Clock3, CheckCircle2, Search, Plus, RefreshCw, Pencil, Trash2, X, Save, BarChart3 } from "lucide-react";
 
-const categories = ["RRB NTPC", "Group D", "ALP", "Technician", "JE", "RPF Constable", "RPF SI"];
 
 function EmptyState({ title = "Nothing here yet", text = "Content will appear here once it is added by the administrator." }) {
   return <div className="empty-state"><div className="empty-icon"><FileText/></div><b>{title}</b><p>{text}</p></div>;
@@ -30,21 +29,31 @@ function useRows(table, filters = []) {
   return { rows, loading, error, reload: load };
 }
 
+// Student-facing category lists always come from Supabase. Hidden categories stay out
+// of the student portal, while older rows with a null is_active value remain visible.
+function useStudentCategories() {
+  const result = useRows("categories");
+  const rows = result.rows.filter(category => category.is_active !== false);
+  return { ...result, rows };
+}
+
 export function StudentDashboard() {
   const { profile } = useAuth();
   const { rows: tests } = useRows("tests", [["is_published","eq",true]]);
   const { rows: notices } = useRows("announcements", [["is_published","eq",true]]);
   const { rows: results } = useRows("results");
+  const { rows: examCategories, loading: categoriesLoading, error: categoriesError } = useStudentCategories();
   return <>
     <PageHeader title={`Welcome${profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : " back"}`} description="Your preparation journey, all in one place."/>
     <div className="welcome-banner"><div><div className="eyebrow light">STAY CONSISTENT. KEEP IMPROVING.</div><h2>Your next goal is within reach.</h2><p>Choose a test, build your confidence and track your progress.</p><Link className="btn btn-white" to="/app/tests">Explore mock tests <ArrowUpRight size={16}/></Link></div><div className="banner-art"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="banner-book"><BookOpen size={58}/></div></div></div>
     <div className="stats-grid"><Stat icon={ClipboardList} label="Available tests" value={tests.length}/><Stat icon={Trophy} label="Tests attempted" value={results.length}/><Stat icon={Target} label="Average score" value={results.length ? `${Math.round(results.reduce((a,r)=>a+Number(r.percentage||0),0)/results.length)}%` : "—"}/><Stat icon={Bell} label="Announcements" value={notices.length}/></div>
-    <div className="content-grid"><div className="panel"><div className="panel-heading"><div><h3>Explore exam categories</h3><p>Choose your target railway examination.</p></div><Link to="/app/categories">View all <ArrowUpRight size={15}/></Link></div><div className="category-grid">{categories.slice(0,4).map((c,i)=><Link className="category-tile" to={`/app/tests?category=${encodeURIComponent(c)}`} key={c}><div className={`category-symbol c${i}`}><BookOpen/></div><b>{c}</b><span>Explore preparation <ArrowUpRight size={13}/></span></Link>)}</div></div><div className="panel"><div className="panel-heading"><div><h3>Latest announcements</h3><p>Updates from your institute.</p></div><Link to="/app/announcements">See all</Link></div>{notices.slice(0,3).length ? notices.slice(0,3).map(n=><div className="notice-line" key={n.id}><span className="notice-dot"/><div><b>{n.title}</b><small>{n.created_at ? new Date(n.created_at).toLocaleDateString() : ""}</small></div></div>) : <EmptyState title="No announcements yet"/>}</div></div>
+    <div className="content-grid"><div className="panel"><div className="panel-heading"><div><h3>Explore exam categories</h3><p>Choose your target railway examination.</p></div><Link to="/app/categories">View all <ArrowUpRight size={15}/></Link></div><div className="category-grid">{examCategories.slice(0,4).map((c,i)=><Link className="category-tile" to={`/app/tests?category=${encodeURIComponent(c.name)}`} key={c.id}><div className={`category-symbol c${i%4}`}><BookOpen/></div><b>{c.name}</b><span>Explore preparation <ArrowUpRight size={13}/></span></Link>)}</div>{categoriesLoading && <div className="muted">Loading categories...</div>}{categoriesError && <div className="inline-message">Could not load categories: {categoriesError}</div>}{!categoriesLoading && !categoriesError && examCategories.length===0 && <EmptyState title="No exam categories available"/>}</div><div className="panel"><div className="panel-heading"><div><h3>Latest announcements</h3><p>Updates from your institute.</p></div><Link to="/app/announcements">See all</Link></div>{notices.slice(0,3).length ? notices.slice(0,3).map(n=><div className="notice-line" key={n.id}><span className="notice-dot"/><div><b>{n.title}</b><small>{n.created_at ? new Date(n.created_at).toLocaleDateString() : ""}</small></div></div>) : <EmptyState title="No announcements yet"/>}</div></div>
   </>;
 }
 
 export function Categories() {
-  return <><PageHeader title="Exam categories" description="Explore preparation resources for your target railway examination."/><div className="category-large-grid">{categories.map((c,i)=><Link to={`/app/tests?category=${encodeURIComponent(c)}`} className="category-large" key={c}><div className={`category-symbol c${i%4}`}><BookOpen/></div><div><h3>{c}</h3><p>Mock tests and previous year papers</p></div><ArrowUpRight/></Link>)}</div></>;
+  const { rows, loading, error } = useStudentCategories();
+  return <><PageHeader title="Exam categories" description="Explore preparation resources for your target railway examination."/>{error && <div className="inline-message">Could not load categories: {error}</div>}{loading ? <div className="loading-line">Loading categories...</div> : rows.length ? <div className="category-large-grid">{rows.map((category,i)=><Link to={`/app/tests?category=${encodeURIComponent(category.name)}`} className="category-large" key={category.id}><div className={`category-symbol c${i%4}`}><BookOpen/></div><div><h3>{category.name}</h3><p>Mock tests and previous year papers</p></div><ArrowUpRight/></Link>)}</div> : <EmptyState title="No exam categories available" text="New categories will appear here when they are added by the administrator."/>}</>;
 }
 
 export function TestList({ pyq = false, admin = false }) {
@@ -228,9 +237,10 @@ export function Profile() {
   const [phone,setPhone] = useState(profile?.phone || "");
   const [preference,setPreference] = useState(profile?.exam_preference || "RRB NTPC");
   const [message,setMessage] = useState("");
+  const { rows: examCategories, loading: categoriesLoading, error: categoriesError } = useStudentCategories();
   useEffect(()=>{setName(profile?.full_name||"");setPhone(profile?.phone||"");setPreference(profile?.exam_preference||"RRB NTPC");},[profile]);
   async function save(e){e.preventDefault();const {error}=await supabase.from("profiles").update({full_name:name,phone,exam_preference:preference}).eq("id",user.id);setMessage(error?.message||"Profile updated successfully.");if(!error)refreshProfile();}
-  return <><PageHeader title="Profile" description="Manage your personal details and exam preference."/><form className="panel profile-form" onSubmit={save}><label>Full name<input value={name} onChange={e=>setName(e.target.value)} required/></label><label>Email address<input value={user?.email||""} disabled/></label><label>Phone number<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Enter phone number"/></label><label>Exam preference<select value={preference} onChange={e=>setPreference(e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></label>{message&&<div className="inline-message">{message}</div>}<button className="btn btn-primary">Save changes</button></form></>;
+  return <><PageHeader title="Profile" description="Manage your personal details and exam preference."/><form className="panel profile-form" onSubmit={save}><label>Full name<input value={name} onChange={e=>setName(e.target.value)} required/></label><label>Email address<input value={user?.email||""} disabled/></label><label>Phone number<input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Enter phone number"/></label><label>Exam preference<select value={preference} onChange={e=>setPreference(e.target.value)}>{preference && !examCategories.some(c=>c.name===preference) && <option value={preference}>{preference}</option>}{examCategories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></label>{categoriesError&&<div className="inline-message">Could not load exam categories: {categoriesError}</div>}{categoriesLoading&&<small className="muted">Loading exam categories...</small>}{message&&<div className="inline-message">{message}</div>}<button className="btn btn-primary">Save changes</button></form></>;
 }
 
 export function Support() {
@@ -322,7 +332,8 @@ export function AdminDashboard() {
   const { rows: students }=useRows("profiles");
   const { rows: tests }=useRows("tests");
   const { rows: results }=useRows("results");
-  return <><PageHeader eyebrow="ADMIN WORKSPACE" title="Admin dashboard" description="Monitor your platform and manage exam preparation content."/><div className="stats-grid"><Stat icon={Users} label="Registered profiles" value={students.length}/><Stat icon={ClipboardList} label="Total tests" value={tests.length}/><Stat icon={Trophy} label="Test attempts" value={results.length}/><Stat icon={BookOpen} label="Exam categories" value={categories.length}/></div><div className="content-grid"><div className="panel"><h3>Content management</h3><p className="muted">Manage the resources available to students.</p><div className="admin-shortcuts"><Link to="/admin/tests"><ClipboardList/> Manage tests <ArrowUpRight/></Link><Link to="/admin/questions"><FileText/> Manage questions <ArrowUpRight/></Link><Link to="/admin/pyq"><BookOpen/> Manage PYQs <ArrowUpRight/></Link><Link to="/admin/announcements"><Bell/> Publish announcements <ArrowUpRight/></Link></div></div><div className="panel"><h3>Important setup note</h3><p className="muted">Admin access is granted only through a trusted database-side role change. Never allow public signup to assign the admin role.</p><div className="security-note"> <CheckCircle2/> Role-based access is enforced by database policies in the supplied SQL setup.</div></div></div></>;
+  const { rows: examCategories }=useRows("categories");
+  return <><PageHeader eyebrow="ADMIN WORKSPACE" title="Admin dashboard" description="Monitor your platform and manage exam preparation content."/><div className="stats-grid"><Stat icon={Users} label="Registered profiles" value={students.length}/><Stat icon={ClipboardList} label="Total tests" value={tests.length}/><Stat icon={Trophy} label="Test attempts" value={results.length}/><Stat icon={BookOpen} label="Exam categories" value={examCategories.length}/></div><div className="content-grid"><div className="panel"><h3>Content management</h3><p className="muted">Manage the resources available to students.</p><div className="admin-shortcuts"><Link to="/admin/tests"><ClipboardList/> Manage tests <ArrowUpRight/></Link><Link to="/admin/questions"><FileText/> Manage questions <ArrowUpRight/></Link><Link to="/admin/pyq"><BookOpen/> Manage PYQs <ArrowUpRight/></Link><Link to="/admin/announcements"><Bell/> Publish announcements <ArrowUpRight/></Link></div></div><div className="panel"><h3>Important setup note</h3><p className="muted">Admin access is granted only through a trusted database-side role change. Never allow public signup to assign the admin role.</p><div className="security-note"> <CheckCircle2/> Role-based access is enforced by database policies in the supplied SQL setup.</div></div></div></>;
 }
 
 export function AdminGeneric({ title, table, columns = ["title","created_at"] }) {
