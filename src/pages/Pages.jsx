@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../components/AuthProvider";
 import PageHeader from "../components/PageHeader";
-import { ArrowUpRight, BookOpen, ClipboardList, Trophy, Users, FileText, Bell, Target, Clock3, CheckCircle2, Search, Plus, RefreshCw, Pencil, Trash2, X, Save } from "lucide-react";
+import { ArrowUpRight, BookOpen, ClipboardList, Trophy, Users, FileText, Bell, Target, Clock3, CheckCircle2, Search, Plus, RefreshCw, Pencil, Trash2, X, Save, BarChart3 } from "lucide-react";
 
 const categories = ["RRB NTPC", "Group D", "ALP", "Technician", "JE", "RPF Constable", "RPF SI"];
 
@@ -56,6 +56,11 @@ export function TestList({ pyq = false, admin = false }) {
   return <><PageHeader eyebrow={admin ? "ADMIN WORKSPACE" : "PREPARATION"} title={admin ? (pyq ? "PYQ management" : "Test management") : (pyq ? "Previous year papers" : "Mock tests")} description={admin ? "Create and manage exam content for students." : (pyq ? "Practice with previous year question papers." : "Build exam readiness with structured mock tests.")} action={admin ? <button className="btn btn-primary" onClick={()=>alert("Content creation form will be enabled after database setup and admin workflow implementation.")}><Plus size={16}/> Add new</button> : null}/><div className="toolbar"><div className="search-box"><Search size={17}/><input placeholder="Search by title or category" value={query} onChange={e=>setQuery(e.target.value)}/></div><button className="btn btn-outline" onClick={reload}><RefreshCw size={15}/> Refresh</button></div>{error && <div className="inline-message">{error}</div>}{loading ? <div className="loading-line">Loading content...</div> : visible.length ? <div className="data-card-list">{visible.map(item=><div className="data-row" key={item.id}><div className="row-icon"><FileText/></div><div className="row-main"><b>{item.title}</b><small>{item.category || "General"} · {item.duration_minutes || "—"} min</small></div><span className={`pill ${item.is_published ? "pill-green" : "pill-gray"}`}>{item.is_published ? "Published" : "Draft"}</span>{!pyq && !admin && <Link className="btn btn-primary btn-small" to={`/app/test/${item.id}`}>View test</Link>}</div>)}</div> : <EmptyState title={pyq ? "No papers available" : "No tests available"} text="Published content will appear here when it is added by the administrator."/>}</>;
 }
 
+const testText = {
+  en: { instructionsTitle:"Test instructions", instructions:["Each question has four options. Select the most appropriate answer.","Use the question palette to navigate between questions.","You can mark a question for review and change your answer before submission.","When the timer reaches zero, the test will be submitted automatically."], start:"Start test", question:"Question", of:"of", clear:"Clear response", mark:"Mark for review", marked:"Marked for review", previous:"Previous", next:"Next", submit:"Submit test", palette:"Question palette", answered:"Answered", review:"Review", unanswered:"Unanswered", confirm:"Are you sure you want to submit this test?", language:"Question language", english:"English", hindi:"हिन्दी", bilingual:"Bilingual", timeUp:"Time is up. Your test is being submitted." },
+  hi: { instructionsTitle:"परीक्षा के निर्देश", instructions:["प्रत्येक प्रश्न में चार विकल्प हैं। सबसे उपयुक्त उत्तर चुनें।","प्रश्नों के बीच जाने के लिए प्रश्न सूची का उपयोग करें।","आप किसी प्रश्न को समीक्षा के लिए चिह्नित कर सकते हैं और जमा करने से पहले उत्तर बदल सकते हैं।","समय समाप्त होने पर परीक्षा अपने आप जमा हो जाएगी।"], start:"परीक्षा शुरू करें", question:"प्रश्न", of:"में से", clear:"उत्तर हटाएँ", mark:"समीक्षा के लिए चिह्नित करें", marked:"समीक्षा के लिए चिह्नित", previous:"पिछला", next:"अगला", submit:"परीक्षा जमा करें", palette:"प्रश्न सूची", answered:"उत्तर दिया", review:"समीक्षा", unanswered:"अनुत्तरित", confirm:"क्या आप वाकई परीक्षा जमा करना चाहते हैं?", language:"प्रश्नों की भाषा", english:"English", hindi:"हिन्दी", bilingual:"द्विभाषी", timeUp:"समय समाप्त हो गया है। आपकी परीक्षा जमा की जा रही है।" }
+};
+
 export function TakeTest() {
   const { id } = useParams();
   const [test, setTest] = useState(null);
@@ -67,119 +72,119 @@ export function TakeTest() {
   const [marked, setMarked] = useState({});
   const [seconds, setSeconds] = useState(0);
   const [message, setMessage] = useState("");
+  const [language, setLanguage] = useState("en");
+  const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const t = testText[language === "hi" ? "hi" : "en"];
 
   useEffect(() => {
     async function load() {
       if (!supabase) { setLoading(false); return; }
-      const [t, q] = await Promise.all([
+      const [tResult, qResult] = await Promise.all([
         supabase.from("tests").select("*").eq("id", id).single(),
         supabase.from("questions").select("*").eq("test_id", id).order("position")
       ]);
-      if (t.error) setMessage(t.error.message); else { setTest(t.data); setSeconds((t.data.duration_minutes || 30) * 60); }
-      if (!q.error) setQuestions(q.data || []); else setMessage(q.error.message);
+      if (tResult.error) setMessage(tResult.error.message);
+      else { setTest(tResult.data); setSeconds((tResult.data.duration_minutes || 30) * 60); }
+      if (qResult.error) setMessage(qResult.error.message); else setQuestions(qResult.data || []);
       setLoading(false);
     }
     load();
   }, [id]);
 
   useEffect(() => {
-    if (!started || seconds <= 0) return;
-    const timer = setInterval(() => setSeconds(s => s - 1), 1000);
-    return () => clearInterval(timer);
-  }, [started, seconds > 0]);
+    if (!started || seconds <= 0 || submitting) return;
+    const timer = setTimeout(() => setSeconds(s => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [started, seconds, submitting]);
 
   const current = questions[index];
   function choose(value) { setAnswers(a => ({ ...a, [current.id]: value })); }
-  async function submit() {
+
+  async function submit(isTimeout = false) {
+    if (submitting) return;
     if (!supabase || !user) { setMessage("Please sign in to submit this test."); return; }
+    setSubmitting(true); setMessage("");
     let correct = 0, wrong = 0, attempted = 0, total = 0;
     questions.forEach(q => {
       total += Number(q.marks || test?.positive_marks || 1);
       const answer = answers[q.id];
       if (answer) { attempted++; if (answer === q.correct_option) correct++; else wrong++; }
     });
-    const positive = Number(test?.positive_marks || 1);
-    const negative = Number(test?.negative_marks || 0);
+    const positive = Number(test?.positive_marks ?? 1);
+    const negative = Number(test?.negative_marks ?? 0);
     const score = correct * positive - wrong * negative;
-    const percentage = total ? Math.max(0, Math.round((score / total) * 10000) / 100) : 0;
-    const { error } = await supabase.from("results").insert({
+    const percentage = total ? Math.round((score / total) * 10000) / 100 : 0;
+    const { data, error } = await supabase.from("results").insert({
       student_id: user.id, test_id: id, attempted_count: attempted,
       correct_count: correct, wrong_count: wrong, unattempted_count: questions.length - attempted,
       total_marks: total, score, percentage, answers
-    });
+    }).select("id").single();
+    setSubmitting(false);
     if (error) setMessage(error.message);
-    else navigate("/app/results");
+    else navigate(`/app/result/${data.id}`, { replace: true, state: { timeout: isTimeout } });
   }
+
+  useEffect(() => {
+    if (started && seconds === 0 && questions.length && !submitting) submit(true);
+  }, [started, seconds]);
 
   if (loading) return <div className="loading-line">Loading test...</div>;
   if (!test) return <><PageHeader title="Test unavailable"/><EmptyState title="Test could not be loaded" text={message || "Check that the test exists and is published."}/></>;
-  if (!started) return <><PageHeader title={test.title} description="Review the instructions before starting your test."/><div className="panel instructions"><h3>Test instructions</h3><ul><li>Each question has four options. Select the most appropriate answer.</li><li>Use the question palette to navigate between questions.</li><li>You can mark a question for review and change your answer before submission.</li><li>The test will be submitted when the timer reaches zero only after you confirm submission.</li></ul><div className="instruction-stats"><span><Clock3/> {test.duration_minutes} minutes</span><span><FileText/> {questions.length} questions</span><span><Target/> +{test.positive_marks ?? 1} / −{test.negative_marks ?? 0} marks</span></div><button className="btn btn-primary" onClick={()=>setStarted(true)}>Start test <ArrowUpRight size={16}/></button></div></>;
   if (!questions.length) return <EmptyState title="Questions are not available" text="Please contact the administrator."/>;
+  if (!started) return <>
+    <PageHeader title={test.title} description="Review the instructions before starting your test."/>
+    <div className="panel instructions">
+      <div className="language-picker"><label htmlFor="test-language">{t.language}</label><select id="test-language" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">{t.english}</option><option value="hi">{t.hindi}</option><option value="bi">{t.bilingual}</option></select></div>
+      <h3>{t.instructionsTitle}</h3><ul>{t.instructions.map((line,i)=><li key={i}>{line}</li>)}</ul>
+      <div className="instruction-stats"><span><Clock3/> {test.duration_minutes} minutes</span><span><FileText/> {questions.length} questions</span><span><Target/> +{test.positive_marks ?? 1} / −{test.negative_marks ?? 0} marks</span></div>
+      <button className="btn btn-primary" onClick={()=>setStarted(true)}>{t.start} <ArrowUpRight size={16}/></button>
+    </div>
+  </>;
 
   const mins = Math.floor(seconds / 60), secs = seconds % 60;
-  return <div className="test-layout"><div className="test-main"><div className="test-top"><div><div className="eyebrow">MOCK TEST</div><h2>{test.title}</h2></div><div className="timer"><Clock3/> {String(mins).padStart(2,"0")}:{String(secs).padStart(2,"0")}</div></div><div className="question-card"><div className="question-meta"><span>Question {index+1} of {questions.length}</span><span>{test.language || "Bilingual"}</span></div><h3>{current.question_text}</h3><div className="options">{["A","B","C","D"].map(opt=><button key={opt} className={`option ${answers[current.id]===opt ? "selected" : ""}`} onClick={()=>choose(opt)}><span>{opt}</span>{current[`option_${opt.toLowerCase()}`]}</button>)}</div><div className="question-actions"><button className="btn btn-outline" onClick={()=>setAnswers(a=>({...a,[current.id]:null}))}>Clear response</button><button className={`btn ${marked[current.id] ? "btn-warning" : "btn-outline"}`} onClick={()=>setMarked(m=>({...m,[current.id]:!m[current.id]}))}>Mark for review</button><div className="push"/><button className="btn btn-outline" disabled={index===0} onClick={()=>setIndex(i=>i-1)}>Previous</button><button className="btn btn-primary" onClick={()=>setIndex(i=>Math.min(questions.length-1,i+1))}>Next</button></div></div><button className="btn btn-primary submit-test" onClick={()=>{if(window.confirm("Are you sure you want to submit this test?")) submit();}}>Submit test</button>{message && <div className="inline-message">{message}</div>}</div><aside className="palette-card"><h3>Question palette</h3><div className="palette-legend"><span><i className="legend-dot answered"/> Answered</span><span><i className="legend-dot review"/> Review</span></div><div className="palette">{questions.map((q,i)=><button key={q.id} className={`${answers[q.id] ? "answered" : ""} ${marked[q.id] ? "review" : ""} ${index===i ? "current" : ""}`} onClick={()=>setIndex(i)}>{i+1}</button>)}</div><div className="palette-summary">{Object.values(answers).filter(Boolean).length} answered · {questions.length-Object.values(answers).filter(Boolean).length} unanswered</div></aside></div>;
+  const bilingual = language === "bi";
+  const questionText = language === "hi" ? (current.question_text_hi || current.question_text) : current.question_text;
+  const optionText = opt => language === "hi" ? (current[`option_${opt.toLowerCase()}_hi`] || current[`option_${opt.toLowerCase()}`]) : current[`option_${opt.toLowerCase()}`];
+  return <div className="test-layout"><div className="test-main">
+    <div className="test-top"><div><div className="eyebrow">MOCK TEST</div><h2>{test.title}</h2><label className="active-language">{t.language}<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">{t.english}</option><option value="hi">{t.hindi}</option><option value="bi">{t.bilingual}</option></select></label></div><div className="timer"><Clock3/> {String(mins).padStart(2,"0")}:{String(secs).padStart(2,"0")}</div></div>
+    <div className="question-card"><div className="question-meta"><span>{t.question} {index+1} {t.of} {questions.length}</span><span>{bilingual ? "Bilingual" : language === "hi" ? "हिन्दी" : "English"}</span></div>
+      <h3>{questionText}</h3>{bilingual && current.question_text_hi && <h3 className="hindi-secondary">{current.question_text_hi}</h3>}
+      <div className="options">{["A","B","C","D"].map(opt=><button key={opt} className={`option ${answers[current.id]===opt ? "selected" : ""}`} onClick={()=>choose(opt)}><span>{opt}</span><div>{optionText(opt)}{bilingual && current[`option_${opt.toLowerCase()}_hi`] && <small className="hindi-option">{current[`option_${opt.toLowerCase()}_hi`]}</small>}</div></button>)}</div>
+      <div className="question-actions"><button className="btn btn-outline" onClick={()=>setAnswers(a=>({...a,[current.id]:null}))}>{t.clear}</button><button className={`btn ${marked[current.id] ? "btn-warning" : "btn-outline"}`} onClick={()=>setMarked(m=>({...m,[current.id]:!m[current.id]}))}>{marked[current.id] ? t.marked : t.mark}</button><div className="push"/><button className="btn btn-outline" disabled={index===0} onClick={()=>setIndex(i=>i-1)}>{t.previous}</button><button className="btn btn-primary" onClick={()=>setIndex(i=>Math.min(questions.length-1,i+1))}>{t.next}</button></div>
+    </div>
+    <button className="btn btn-primary submit-test" disabled={submitting} onClick={()=>{if(window.confirm(t.confirm)) submit(false);}}>{submitting ? "Submitting..." : t.submit}</button>{message && <div className="inline-message">{message}</div>}
+  </div><aside className="palette-card"><h3>{t.palette}</h3><div className="palette-legend"><span><i className="legend-dot answered"/> {t.answered}</span><span><i className="legend-dot review"/> {t.review}</span></div><div className="palette">{questions.map((q,i)=><button key={q.id} className={`${answers[q.id] ? "answered" : ""} ${marked[q.id] ? "review" : ""} ${index===i ? "current" : ""}`} onClick={()=>setIndex(i)}>{i+1}</button>)}</div><div className="palette-summary">{Object.values(answers).filter(Boolean).length} {t.answered} · {questions.length-Object.values(answers).filter(Boolean).length} {t.unanswered}</div></aside></div>;
 }
 
 export function Results() {
   const { user } = useAuth();
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    async function load() {
-      if (!supabase || !user) { setLoading(false); return; }
-      const { data } = await supabase.from("results").select("*, tests(title, category)").eq("student_id", user.id).order("created_at",{ascending:false});
-      setRows(data || []); setLoading(false);
-    } load();
-  }, [user]);
-  return <><PageHeader title="Your results" description="Review your test attempts and monitor your progress."/><div className="stats-grid"><Stat icon={ClipboardList} label="Total attempts" value={rows.length}/><Stat icon={CheckCircle2} label="Questions correct" value={rows.reduce((a,r)=>a+Number(r.correct_count||0),0)}/><Stat icon={Target} label="Average accuracy" value={rows.length ? `${Math.round(rows.reduce((a,r)=>a+Number(r.percentage||0),0)/rows.length)}%` : "—"}/></div>{loading ? <div className="loading-line">Loading results...</div> : rows.length ? <div className="data-card-list">{rows.map(r=><div className="data-row" key={r.id}><div className="row-icon"><Trophy/></div><div className="row-main"><b>{r.tests?.title || "Test attempt"}</b><small>{new Date(r.created_at).toLocaleString()} · {r.correct_count} correct · {r.wrong_count} wrong · {r.unattempted_count} unattempted</small></div><div className="result-score"><b>{r.score}</b><small>{r.percentage}%</small></div></div>)}</div> : <EmptyState title="No results yet" text="Complete your first mock test to see your score and analysis here."/>}</>;
+  const [rows, setRows] = useState([]); const [loading,setLoading]=useState(true); const [error,setError]=useState("");
+  useEffect(() => { let alive=true; async function load() { if (!supabase || !user) { setLoading(false); return; } const { data,error } = await supabase.from("results").select("*, tests(title, category)").eq("student_id", user.id).order("created_at",{ascending:false}); if(!alive)return; setRows(data||[]);setError(error?.message||"");setLoading(false); } load();return()=>{alive=false;}; }, [user]);
+  return <><PageHeader title="Your results" description="Review your test attempts and monitor your progress."/><div className="stats-grid"><Stat icon={ClipboardList} label="Total attempts" value={rows.length}/><Stat icon={CheckCircle2} label="Questions correct" value={rows.reduce((a,r)=>a+Number(r.correct_count||0),0)}/><Stat icon={Target} label="Average score" value={rows.length ? `${Math.round(rows.reduce((a,r)=>a+Number(r.percentage||0),0)/rows.length)}%` : "—"}/></div>{error&&<div className="inline-message">{error}</div>}{loading ? <div className="loading-line">Loading results...</div> : rows.length ? <div className="data-card-list">{rows.map(r=><div className="data-row" key={r.id}><div className="row-icon"><Trophy/></div><div className="row-main"><b>{r.tests?.title || "Test attempt"}</b><small>{new Date(r.created_at).toLocaleString()} · {r.correct_count} correct · {r.wrong_count} wrong · {r.unattempted_count} unattempted</small></div><div className="result-score"><b>{r.score}</b><small>{r.percentage}%</small></div><Link className="btn btn-outline btn-small" to={`/app/result/${r.id}`}>View solutions</Link></div>)}</div> : <EmptyState title="No results yet" text="Complete your first mock test to see your score and analysis here."/>}</>;
+}
+
+export function ResultDetail() {
+  const { id } = useParams(); const { user } = useAuth();
+  const [result,setResult]=useState(null); const [test,setTest]=useState(null); const [questions,setQuestions]=useState([]); const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [language,setLanguage]=useState("en");
+  useEffect(()=>{let alive=true;async function load(){if(!supabase||!user){setLoading(false);return;}const {data:r,error:re}=await supabase.from("results").select("*").eq("id",id).eq("student_id",user.id).single();if(re){if(alive){setError(re.message);setLoading(false);}return;}const [tr,qr]=await Promise.all([supabase.from("tests").select("*").eq("id",r.test_id).single(),supabase.from("questions").select("*").eq("test_id",r.test_id).order("position")]);if(alive){setResult(r);setTest(tr.data);setQuestions(qr.data||[]);setError(tr.error?.message||qr.error?.message||"");setLoading(false);}}load();return()=>{alive=false;};},[id,user]);
+  if(loading)return <div className="loading-line">Loading solutions...</div>;if(!result)return <><PageHeader title="Result unavailable"/><EmptyState title="Result could not be loaded" text={error||"This result may not belong to your account."}/></>;
+  const answers=result.answers||{};const accuracy=result.attempted_count?Math.round(result.correct_count/result.attempted_count*100):0;
+  return <><PageHeader title={test?.title||"Test review"} description="Your score, answer status and explanations."/><div className="stats-grid"><Stat icon={Trophy} label="Score" value={`${result.score} / ${result.total_marks}`}/><Stat icon={CheckCircle2} label="Correct" value={result.correct_count}/><Stat icon={Target} label="Wrong" value={result.wrong_count}/><Stat icon={ClipboardList} label="Accuracy" value={`${accuracy}%`}/></div><div className="review-toolbar"><label>Review language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">हिन्दी</option><option value="bi">Bilingual</option></select></label><span>{result.unattempted_count} unanswered</span></div>
+  <div className="review-question-list">{questions.map((q,i)=>{const picked=answers[q.id]||null;const isCorrect=picked===q.correct_option;const qText=language==="hi"?(q.question_text_hi||q.question_text):q.question_text;return <article className="panel review-question" key={q.id}><div className="review-q-head"><b>Question {i+1}</b><span className={`pill ${!picked?"pill-gray":isCorrect?"pill-green":"pill-red"}`}>{!picked?"Not attempted":isCorrect?"Correct":"Wrong"}</span></div><h3>{qText}</h3>{language==="bi"&&q.question_text_hi&&<p className="hindi-secondary">{q.question_text_hi}</p>}<div className="review-options">{["A","B","C","D"].map(opt=>{const label=language==="hi"?(q[`option_${opt.toLowerCase()}_hi`]||q[`option_${opt.toLowerCase()}`]):q[`option_${opt.toLowerCase()}`];return <div key={opt} className={`review-option ${opt===q.correct_option?"right-answer":""} ${opt===picked&&opt!==q.correct_option?"wrong-answer":""}`}><b>{opt}</b><span>{label}{language==="bi"&&q[`option_${opt.toLowerCase()}_hi`]&&<small className="hindi-option">{q[`option_${opt.toLowerCase()}_hi`]}</small>}</span>{opt===q.correct_option&&<small>Correct answer</small>}{opt===picked&&<small>Your answer</small>}</div>;})}</div><div className="solution-box"><b>Explanation</b><p>{q.explanation||"No explanation has been added for this question."}</p></div></article>;})}</div></>;
 }
 
 export function Performance() {
-  const { user } = useAuth();
-  const [rows, setRows] = useState([]);
-  useEffect(() => { if (supabase && user) supabase.from("results").select("*").eq("student_id",user.id).order("created_at").then(({data})=>setRows(data||[])); },[user]);
-  return <><PageHeader title="Performance" description="Understand your progress across test attempts."/><div className="stats-grid"><Stat icon={Trophy} label="Tests completed" value={rows.length}/><Stat icon={Target} label="Best score" value={rows.length ? Math.max(...rows.map(r=>Number(r.percentage||0)))+"%" : "—"}/><Stat icon={ChartNoAxesCombined} label="Latest score" value={rows.length ? rows[rows.length-1].percentage+"%" : "—"}/></div><div className="panel"><h3>Attempt history</h3>{rows.length ? <div className="data-card-list">{rows.map(r=><div className="data-row" key={r.id}><div className="row-main"><b>{new Date(r.created_at).toLocaleDateString()}</b><small>{r.correct_count} correct / {r.wrong_count} wrong / {r.unattempted_count} unattempted</small></div><b>{r.percentage}%</b></div>)}</div> : <EmptyState title="Your progress will appear here"/>}</div></>;
+  const { user } = useAuth(); const [rows,setRows]=useState([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");
+  useEffect(()=>{let alive=true;async function load(){if(!supabase||!user){setLoading(false);return;}const {data,error}=await supabase.from("results").select("*, tests(title,category)").eq("student_id",user.id).order("created_at",{ascending:true});if(alive){setRows(data||[]);setError(error?.message||"");setLoading(false);}}load();return()=>{alive=false;};},[user]);
+  const attempts=rows.length;const avg=attempts?Math.round(rows.reduce((a,r)=>a+Number(r.percentage||0),0)/attempts):0;const best=attempts?Math.max(...rows.map(r=>Number(r.percentage||0))):0;const totalCorrect=rows.reduce((a,r)=>a+Number(r.correct_count||0),0);const totalWrong=rows.reduce((a,r)=>a+Number(r.wrong_count||0),0);const totalAttempted=rows.reduce((a,r)=>a+Number(r.attempted_count||0),0);const accuracy=totalAttempted?Math.round(totalCorrect/totalAttempted*100):0;
+  return <><PageHeader title="Performance" description="Understand your progress across test attempts."/>{error&&<div className="inline-message">{error}</div>}<div className="stats-grid"><Stat icon={Trophy} label="Tests completed" value={attempts}/><Stat icon={Target} label="Average score" value={attempts?`${avg}%`:"—"}/><Stat icon={CheckCircle2} label="Best score" value={attempts?`${best}%`:"—"}/><Stat icon={ClipboardList} label="Accuracy" value={totalAttempted?`${accuracy}%`:"—"}/></div><div className="panel"><h3>Overall answer analysis</h3><div className="performance-breakdown"><div><b>{totalCorrect}</b><span>Correct answers</span></div><div><b>{totalWrong}</b><span>Wrong answers</span></div><div><b>{rows.reduce((a,r)=>a+Number(r.unattempted_count||0),0)}</b><span>Unanswered</span></div></div></div><div className="panel"><h3>Attempt history</h3>{loading?<div className="loading-line">Loading performance...</div>:rows.length?<div className="data-card-list">{[...rows].reverse().map(r=><div className="data-row" key={r.id}><div className="row-main"><b>{r.tests?.title||"Mock test"}</b><small>{new Date(r.created_at).toLocaleDateString()} · {r.correct_count} correct / {r.wrong_count} wrong / {r.unattempted_count} unanswered</small></div><b>{r.score} marks · {r.percentage}%</b><Link className="btn btn-outline btn-small" to={`/app/result/${r.id}`}>Review</Link></div>)}</div>:<EmptyState title="Your progress will appear here" text="Complete a mock test to see your score and performance analysis."/>}</div></>;
 }
 
-
 export function Announcements() {
-  const { rows, loading } = useRows("announcements", [
-    ["is_published", "eq", true],
-  ]);
-
-  return (
-    <>
-      <PageHeader
-        title="Announcements"
-        description="Important updates and notices."
-      />
-
-      {loading ? (
-        <div className="loading-line">
-          Loading announcements...
-        </div>
-      ) : rows.length ? (
-        <div className="data-card-list">
-          {rows.map((n) => (
-            <article className="announcement-card" key={n.id}>
-              <div className="notice-dot" />
-              <div>
-                <h3>{n.title}</h3>
-                <p>{n.body}</p>
-                <small>
-                  {new Date(n.created_at).toLocaleDateString()}
-                </small>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <EmptyState title="No announcements yet" />
-      )}
-    </>
-  );
+  const { rows, loading } = useRows("announcements", [["is_published","eq",true]]);
+  return <><PageHeader title="Announcements" description="Important updates and notices."/>{loading ? <div className="loading-line">Loading announcements...</div> : rows.length ? <div className="data-card-list">{rows.map(n=><article className="announcement-card" key={n.id}><div className="notice-dot"/><div><h3>{n.title}</h3><p>{n.body}</p><small>{new Date(n.created_at).toLocaleDateString()}</small></div></article>) : <EmptyState title="No announcements yet"/>}</>;
 }
 
 export function Profile() {
